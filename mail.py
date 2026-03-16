@@ -6,7 +6,7 @@ import seaborn as sns
 import re
 
 # --- ページ設定と出典表示 ---
-st.set_page_config(page_title="保育園空き状況シミュレーター")
+st.set_page_config(page_title="【目黒区】保育園の月別空き数　推移グラフ生成")
 st.caption("出典：目黒区オープンデータ（CC BY 4.0）を加工して作成")
 
 # --- ステップ4で説明する「鍵」の仕組み ---
@@ -26,7 +26,7 @@ if user_password != CORRECT_PASSWORD:
 else:
     # --- ここから下を、すべて「半角スペース4つ分」右にずらす ---
     st.success("認証されました！")
-    st.title("保育園空き数推移グラフ")
+    st.title("【目黒区】保育園の月別空き数　推移グラフ生成")
     search_keyword = st.text_input("保育園名を入力してください")
 
 if search_keyword:
