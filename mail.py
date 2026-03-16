@@ -18,9 +18,16 @@ if user_password != CORRECT_PASSWORD:
     st.link_button("決済してパスワードを取得する", "https://buy.stripe.com/test_eVq14n7W27ZOcumeKJ0co00") # Stripeリンク
     st.stop() # パスワードが違う場合はここで処理を止める
 
-# --- メイン機能 ---
-st.title("保育園空き数推移グラフ")
-search_keyword = st.text_input("保育園名を入力してください（例：双葉の園ひがしやま保育園）")
+# --- パスワードチェック部分 ---
+if user_password != CORRECT_PASSWORD:
+    st.info("💡 このツールは有料（300円）です。")
+    st.link_button("決済してパスワードを取得する", STRIPE_LINK)
+    st.stop()
+else:
+    # --- ここから下を、すべて「半角スペース4つ分」右にずらす ---
+    st.success("認証されました！")
+    st.title("保育園空き数推移グラフ")
+    search_keyword = st.text_input("保育園名を入力してください")
 
 if search_keyword:
     with st.spinner('データを集計中...'):
