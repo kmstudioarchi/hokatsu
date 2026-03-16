@@ -109,10 +109,13 @@ else:
                 df_plot = match.melt(id_vars='表示月', value_vars=plot_cols, var_name='年齢', value_name='空き数')
                 df_plot = df_plot.sort_values('表示月')
 
-                fig, ax = plt.subplots(figsize=(10, 5))
-                sns.lineplot(data=df_plot, x='表示月', y='空き数', hue='年齢', marker='o', ax=ax)
-                plt.xticks(rotation=45)
-                plt.grid(True, linestyle=':', alpha=0.6)
-                st.pyplot(fig)
+                # --- 日本語OKなグラフ表示 ---
+                st.subheader(f"📊 {selected_nursery} の空き数推移")
+                
+                # グラフ用のデータを作成（横軸を表示月に、縦軸を年齢別のカラムに）
+                chart_data = match.set_index('表示月')[plot_cols]
+                
+                # Streamlit標準のグラフを表示（これなら日本語が化けません！）
+                st.line_chart(chart_data)
             else:
                 st.warning("該当する園が見つかりません。")
