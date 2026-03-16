@@ -2,11 +2,12 @@ import streamlit as st
 import pandas as pd
 import requests
 import re
+import time
 
 # --- 1. ページ設定 ---
 st.set_page_config(page_title="【目黒区】保育園の空き数推移グラフ 生成サービス")
 
-# --- 2. データの高速読み込み（2年分限定 + 最新優先） ---
+# --- 2. データの高速読み込み（進捗表示付き） ---
 @st.cache_data(ttl=3600)
 def load_nursery_data_2years():
     package_id = "131105_available_child_care"
@@ -15,27 +16,37 @@ def load_nursery_data_2years():
     try:
         res_package = requests.get(package_url).json()
         resources = res_package['result']['resources']
-        
-        # 最新の24個（約2年分）に絞る
         target_resources = resources[:24]
         
         all_data = []
-        for r in target_resources:
+        
+        # 進捗バーの設置
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        for i, r in enumerate(target_resources):
+            # 進捗率の計算と表示
+            percent = int((i + 1) / len(target_resources) * 100)
+            progress_bar.progress(percent)
+            status_text.text(f"データ取得中... ({i+1}/24ヶ月分を完了)")
+            
             try:
                 df = pd.read_csv(r['url'], encoding='shift-jis')
                 df['調査時点'] = r['name']
-                # リソースの作成日時（created）を取得
                 df['作成日時'] = r.get('created', '') 
                 all_data.append(df)
             except:
                 continue
+        
+        # 完了後の表示クリア
+        progress_bar.empty()
+        status_text.empty()
         
         if not all_data:
             return None
             
         df_full = pd.concat(all_data, sort=False)
 
-        # 日付クレンジング
         def clean_date(text):
             nums = re.findall(r'\d+', str(text))
             if len(nums) >= 2:
@@ -45,14 +56,10 @@ def load_nursery_data_2years():
             return text
 
         df_full['表示月'] = df_full['調査時点'].apply(clean_date)
-        
-        # ★ 同月内で「より後に公表されたデータ」を優先する処理 ★
-        # 表示月と作成日時で並べ替え
         df_full = df_full.sort_values(['表示月', '作成日時'], ascending=[True, True])
         
         name_col = next((c for c in df_full.columns if '名' in c or '施設' in c), None)
         if name_col:
-            # 同じ月・同じ園のデータがある場合、最後に登録されたもの（keep='last'）を採用
             df_full = df_full.drop_duplicates(subset=['表示月', name_col], keep='last')
 
         return df_full
@@ -74,11 +81,10 @@ if user_password != CORRECT_PASSWORD:
 else:
     st.success("認証に成功しました！")
     st.title("【目黒区】保育園の空き数推移（直近2ヶ年）")
-    
-    # --- 出典とリンク ---
     st.caption("出典：[目黒区オープンデータ](https://data.bodik.jp/dataset/131105_available_child_care)（CC BY 4.0）")
     
-    with st.spinner('データを解析中...'):
+    # 解析中メッセージの強化
+    with st.spinner('⌛ データの解析を開始します。完了まで最大2分ほどかかります。そのままお待ちください...'):
         df_all = load_nursery_data_2years()
 
     if df_all is not None:
@@ -95,7 +101,6 @@ else:
                 match = df_all[df_all[name_col] == selected_nursery].copy()
                 match = match.sort_values('表示月')
 
-                # --- 年齢選択機能（5歳児まで） ---
                 st.write("▼ 表示したい年齢を選択してください")
                 age_options = ['0歳児', '1歳児', '2歳児', '3歳児', '4歳児', '5歳児']
                 selected_ages = []
@@ -111,17 +116,11 @@ else:
                     if col:
                         plot_cols.append(col)
 
-                # --- グラフの表示 ---
                 if plot_cols:
                     st.subheader(f"📊 {selected_nursery} の空き数推移")
-                    
-                    # データを整理
                     chart_data = match.set_index('表示月')[plot_cols]
-                    
-                    # グラフ表示（マウスホバーで縦補助線が表示されます）
                     st.line_chart(chart_data)
 
-                    # --- 注釈と免責事項（文句を言われないための対策） ---
                     with st.expander("⚠️ データの取り扱いと免責事項について"):
                         st.markdown("""
                         **【データの集計ルールについて】**
