@@ -6,7 +6,7 @@ import seaborn as sns
 import re
 
 # --- 1. ページ設定 ---
-st.set_page_config(page_title="【目黒区】保育園空き数推移（直近2ヶ年）")
+st.set_page_config(page_title="【目黒区】保育園の空き数推移グラフ 生成サービス（直近2ヶ年）")
 st.caption("出典：目黒区オープンデータ（CC BY 4.0）を加工して作成")
 
 # --- 2. データの高速読み込み（キャッシュ機能 + 2年分限定 + 最新優先） ---
@@ -73,17 +73,30 @@ if user_password != CORRECT_PASSWORD:
     st.link_button("決済してパスワードを取得する", STRIPE_LINK)
     st.stop()
 else:
-    st.title("保育園空き数推移（直近2年間）")
+    st.title("【目黒区】保育園の空き数推移グラフ 生成サービス（直近2ヶ年）")
     
     with st.spinner('過去24ヶ月分のデータを解析中...'):
         df_all = load_nursery_data_2years()
 
     if df_all is not None:
-        search_keyword = st.text_input("保育園名を入力してください")
+        # 1. データの中から「園名」が入っている列を探す
+        name_col = next((c for c in df_all.columns if '名' in c or '施設' in c), None)
+        
+        if name_col:
+            # 2. 全データから重複のない園名リストを作成（あいうえお順に並べ替え）
+            nursery_list = sorted(df_all[name_col].unique().tolist())
+            
+            # 3. プルダウン（セレクトボックス）を表示
+            # 最初に空の選択肢を入れたい場合は ["選択してください..."] + nursery_list にします
+            selected_nursery = st.selectbox(
+                "表示したい保育園を選択してください",
+                options=["選択してください..."] + nursery_list
+            )
 
-        if search_keyword:
-            name_col = next((c for c in df_all.columns if '名' in c or '施設' in c), None)
-            match = df_all[df_all[name_col].astype(str).str.contains(search_keyword, na=False)].copy()
+            # 4. 選択された園がある場合にグラフを描画
+            if selected_nursery != "選択してください...":
+                match = df_all[df_all[name_col] == selected_nursery].copy()
+
 
             if not match.empty:
                 # グラフ用の年齢別カラム特定
