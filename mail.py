@@ -10,8 +10,8 @@ st.set_page_config(page_title="保育園空き状況シミュレーター")
 st.caption("出典：目黒区オープンデータ（CC BY 4.0）を加工して作成")
 
 # --- ステップ4で説明する「鍵」の仕組み ---
-CORRECT_PASSWORD = "your-password-here" # Stripe決済後に教える合言葉
-user_password = st.sidebar.text_input("hokatsu0123", type="password")
+CORRECT_PASSWORD = "hokatsu0123"  # 
+user_password = st.sidebar.text_input("パスワードを入力してください", type="password") # ← ここは「案内文」です
 
 if user_password != CORRECT_PASSWORD:
     st.info("💡 このツールは有料（300円）です。")
