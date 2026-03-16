@@ -78,3 +78,6 @@ if search_keyword:
                 st.warning("該当する保育園が見つかりませんでした。")
         except Exception as e:
             st.error(f"エラーが発生しました: {e}")
+
+st.write(f"入力されたパスワード: {user_password}")
+st.write(f"正解のパスワード: {CORRECT_PASSWORD}")
