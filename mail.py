@@ -6,89 +6,100 @@ import seaborn as sns
 import re
 
 # --- 1. ページ設定 ---
-st.set_page_config(page_title="【目黒区】保育園の月別空き数 推移グラフ生成")
+st.set_page_config(page_title="【目黒区】保育園空き数推移（直近2ヶ年）")
 st.caption("出典：目黒区オープンデータ（CC BY 4.0）を加工して作成")
 
-# --- 2. データの高速読み込み（キャッシュ機能） ---
-@st.cache_data(ttl=3600)  # 1時間はデータを保存して使い回す
-def load_all_meguro_data():
+# --- 2. データの高速読み込み（キャッシュ機能 + 2年分限定 + 最新優先） ---
+@st.cache_data(ttl=3600)
+def load_nursery_data_2years():
     package_id = "131105_available_child_care"
     package_url = f"https://data.bodik.jp/api/3/action/package_show?id={package_id}"
     res_package = requests.get(package_url).json()
+    
+    # 全リソース取得（通常、新しい順に並んでいます）
     resources = res_package['result']['resources']
     
+    # 直近24個（約2年分）に絞る
+    target_resources = resources[:24]
+    
     all_data = []
-    for r in resources:
+    for r in target_resources:
         try:
             df = pd.read_csv(r['url'], encoding='shift-jis')
+            # リソース名（例：令和6年4月1日現在）を保存
             df['調査時点'] = r['name']
+            # メタデータの作成日時なども考慮できるようリソース情報を付与
+            df['作成日時'] = r.get('created', '') 
             all_data.append(df)
         except:
             continue
-    return pd.concat(all_data, sort=False) if all_data else None
+    
+    if not all_data:
+        return None
+        
+    df_full = pd.concat(all_data, sort=False)
+
+    # 日付クレンジング関数の定義（重複排除のため先に処理）
+    def clean_date(text):
+        nums = re.findall(r'\d+', str(text))
+        if len(nums) >= 2:
+            year, month = int(nums[0]), int(nums[1])
+            if year < 100: year += 2018
+            return f"{year}/{month:02d}"
+        return text
+
+    df_full['表示月'] = df_full['調査時点'].apply(clean_date)
+
+    # ★ 同月内で「後から出たデータ」のみを残す処理 ★
+    # 作成日時やリソースの並び順を利用して、同じ「表示月」の中で最新の1つに絞り込む
+    df_full = df_full.sort_values(['表示月', '作成日時'], ascending=[True, True])
+    # 各月・各園の組み合わせで、一番最後のデータ（最新）を保持
+    # 園名カラムを特定
+    name_col = next((c for c in df_full.columns if '名' in c or '施設' in c), None)
+    if name_col:
+        df_full = df_full.drop_duplicates(subset=['表示月', name_col], keep='last')
+
+    return df_full
 
 # --- 3. 認証と決済の設定 ---
 CORRECT_PASSWORD = "hokatsu0123" 
-STRIPE_LINK = "https://buy.stripe.com/test_eVq14n7W27ZOcumeKJ0co00" # あなたのStripeリンク
+STRIPE_LINK = "https://buy.stripe.com/test_eVq14n7W27ZOcumeKJ0co00" # あなたのリンク
 
-# サイドバーにパスワード入力欄
 user_password = st.sidebar.text_input("パスワードを入力してください", type="password")
 
 # --- 4. メイン処理 ---
 if user_password != CORRECT_PASSWORD:
-    # パスワードが違う場合の画面
     st.info("💡 このツールは有料（300円）です。")
     st.link_button("決済してパスワードを取得する", STRIPE_LINK)
-    st.stop() 
+    st.stop()
 else:
-    # パスワードが合っている場合の画面
-    st.success("認証されました！")
-    st.title("【目黒区】保育園の月別空き数 推移グラフ生成")
+    st.title("保育園空き数推移（直近2年間）")
     
-    # データのロード（キャッシュにより2回目以降は爆速）
-    with st.spinner('最新データを準備中...'):
-        df_full = load_all_meguro_data()
+    with st.spinner('過去24ヶ月分のデータを解析中...'):
+        df_all = load_nursery_data_2years()
 
-    if df_full is not None:
-        search_keyword = st.text_input("保育園名を入力してください（例：双葉の園ひがしやま保育園）")
+    if df_all is not None:
+        search_keyword = st.text_input("保育園名を入力してください")
 
         if search_keyword:
-            with st.spinner('グラフを生成中...'):
-                # キーワードで絞り込み
-                name_col = next((c for c in df_full.columns if '名' in c or '施設' in c), None)
-                if name_col:
-                    match = df_full[df_full[name_col].astype(str).str.contains(search_keyword, na=False)].copy()
-                    
-                    if not match.empty:
-                        # 日付クレンジング
-                        def clean_date(text):
-                            nums = re.findall(r'\d+', str(text))
-                            if len(nums) >= 2:
-                                year, month = int(nums[0]), int(nums[1])
-                                if year < 100: year += 2018
-                                return f"{year}/{month:02d}"
-                            return text
+            name_col = next((c for c in df_all.columns if '名' in c or '施設' in c), None)
+            match = df_all[df_all[name_col].astype(str).str.contains(search_keyword, na=False)].copy()
 
-                        match['表示日付'] = match['調査時点'].apply(clean_date)
-                        df_final = match.groupby('表示日付').mean(numeric_only=True).reset_index()
-                        df_final = df_final.sort_values('表示日付')
+            if not match.empty:
+                # グラフ用の年齢別カラム特定
+                plot_cols = []
+                for age in ['0歳', '０歳', '1歳', '１歳', '2歳', '２歳']:
+                    col = next((c for c in match.columns if age in c and '児' in c), None)
+                    if col and col not in plot_cols:
+                        plot_cols.append(col)
 
-                        # 年齢別カラムの特定
-                        plot_cols = []
-                        for age in ['0歳', '０歳', '1歳', '１歳', '2歳', '２歳']:
-                            col = next((c for c in df_final.columns if age in c and '児' in c), None)
-                            if col and col not in plot_cols:
-                                plot_cols.append(col)
+                df_plot = match.melt(id_vars='表示月', value_vars=plot_cols, var_name='年齢', value_name='空き数')
+                df_plot = df_plot.sort_values('表示月')
 
-                        # 描画
-                        df_plot = df_final.melt(id_vars='表示日付', value_vars=plot_cols, var_name='年齢', value_name='空き数')
-                        
-                        fig, ax = plt.subplots(figsize=(10, 5))
-                        sns.lineplot(data=df_plot, x='表示日付', y='空き数', hue='年齢', marker='o', errorbar=None, ax=ax)
-                        plt.xticks(rotation=45)
-                        plt.grid(True, linestyle=':', alpha=0.6)
-                        st.pyplot(fig)
-                    else:
-                        st.warning("該当する保育園が見つかりませんでした。正確な名前を入力してください。")
-    else:
-        st.error("データの読み込みに失敗しました。時間をおいて再度お試しください。")
+                fig, ax = plt.subplots(figsize=(10, 5))
+                sns.lineplot(data=df_plot, x='表示月', y='空き数', hue='年齢', marker='o', ax=ax)
+                plt.xticks(rotation=45)
+                plt.grid(True, linestyle=':', alpha=0.6)
+                st.pyplot(fig)
+            else:
+                st.warning("該当する園が見つかりません。")
