@@ -6,7 +6,6 @@ import re
 # --- 1. ページ設定 ---
 st.set_page_config(
     page_title="保育園の空き数 推移グラフ 生成【目黒区ver.】",
-    page_icon="🏠",
     layout="centered"
 )
 
@@ -65,102 +64,82 @@ def load_nursery_data_2years():
         st.error(f"データ取得中にエラーが発生しました: {e}")
         return None
 
-# --- 3. 認証・決済設定 ---
-CORRECT_PASSWORD = "hokatsu0123" 
-STRIPE_LINK = "https://buy.stripe.com/test_eVq14n7W27ZOcumeKJ0co00" 
-
-st.sidebar.header("🔑 認証")
-user_password = st.sidebar.text_input("パスワードを入力", type="password")
+# --- 3. noteのURL設定 ---
+# 作成したnote記事（使い方や想いを書いたもの）のURLをここに入れてください
+NOTE_URL = "https://note.com/あなたのID/n/記事のID"
 
 # --- 4. メイン画面のヘッダー ---
 st.title("🏠 保育園の空き数 推移グラフ 生成【目黒区ver.】")
-st.markdown("""
-### 「いつ、どの園なら入りやすい？」を過去2年のデータから可視化。
-目黒区が公表している過去の空き状況データを集計し、特定の保育園の空き数の変化をグラフで見ることができるツールです。
-**保活の戦略（いつ頃空きが出やすいか、0歳と1歳の違いなど）**を立てるのにお役立てください。
+st.markdown(f"""
+### 過去2年間のデータを可視化して、保活をサポート。
+目黒区が公表している過去24ヶ月分の空き状況を自動集計し、特定の園の推移をグラフ化します。
+活用方法や開発の背景については [こちらのnote記事]({NOTE_URL}) をご覧ください。
 """)
 
 st.divider()
 
-# --- 5. メイン処理 ---
-if user_password != CORRECT_PASSWORD:
-    st.info("💡 **このツールは有料（300円）です。**")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("""
-        **【このツールでわかること】**
-        * 特定の園の過去24ヶ月の空き数推移
-        * 年齢別（0歳〜5歳）の空き状況比較
-        * 同月内の最新修正データの自動反映
-        """)
-    with col2:
-        st.markdown("""
-        **【ご利用の流れ】**
-        1. 下のボタンから決済を完了
-        2. 発行されるパスワードを左の欄に入力
-        3. 園名を選んでグラフを表示
-        """)
-    
-    st.link_button("👉 決済してパスワードを取得する", STRIPE_LINK, use_container_width=True)
-    st.stop()
-else:
-    st.success("認証に成功しました。データの読み込みを開始します。")
-    
-    with st.spinner('⌛ 最新データを解析中... 最大2分ほどかかります。そのままお待ちください。'):
-        df_all = load_nursery_data_2years()
+# --- 5. メイン処理（誰でも利用可能） ---
+with st.spinner('⌛ 最新データを解析中... 最大2分ほどかかります。そのままお待ちください。'):
+    df_all = load_nursery_data_2years()
 
-    if df_all is not None:
-        name_col = next((c for c in df_all.columns if '名' in c or '施設' in c), None)
+if df_all is not None:
+    name_col = next((c for c in df_all.columns if '名' in c or '施設' in c), None)
+    
+    if name_col:
+        st.markdown("### 🔍 1. 保育園と年齢を選ぶ")
         
-        if name_col:
-            st.markdown("### 🔍 ステップ1：保育園を選ぶ")
-            nursery_list = sorted(df_all[name_col].unique().tolist())
-            selected_nursery = st.selectbox(
-                "表示したい保育園名を選択してください",
-                options=["選択してください..."] + nursery_list
-            )
+        nursery_list = sorted(df_all[name_col].unique().tolist())
+        selected_nursery = st.selectbox("保育園名を選択", options=["選択してください..."] + nursery_list)
 
-            if selected_nursery != "選択してください...":
-                st.markdown("### 👶 ステップ2：年齢を選ぶ")
-                match = df_all[df_all[name_col] == selected_nursery].copy()
-                match = match.sort_values('表示月')
+        age_options = ['0歳児', '1歳児', '2歳児', '3歳児', '4歳児', '5歳児']
+        selected_ages = []
+        cols = st.columns(6)
+        for i, age in enumerate(age_options):
+            if cols[i].checkbox(age, value=(i <= 2)):
+                selected_ages.append(age)
 
-                age_options = ['0歳児', '1歳児', '2歳児', '3歳児', '4歳児', '5歳児']
-                selected_ages = []
-                cols = st.columns(6)
-                for i, age in enumerate(age_options):
-                    if cols[i].checkbox(age, value=(i <= 2)):
-                        selected_ages.append(age)
+        if selected_nursery != "選択してください...":
+            st.divider()
+            
+            match = df_all[df_all[name_col] == selected_nursery].copy()
+            match = match.sort_values('表示月')
 
-                plot_cols = []
-                for age in selected_ages:
-                    age_num = age[0]
-                    col = next((c for c in match.columns if (age_num in c) and ('児' in c)), None)
-                    if col: plot_cols.append(col)
+            plot_cols = []
+            for age in selected_ages:
+                age_num = age[0]
+                col = next((c for c in match.columns if (age_num in c) and ('児' in c)), None)
+                if col: plot_cols.append(col)
 
-                if plot_cols:
-                    st.divider()
-                    st.subheader(f"📈 {selected_nursery} の空き数推移")
-                    chart_data = match.set_index('表示月')[plot_cols]
-                    
-                    # グラフ表示
-                    st.line_chart(chart_data)
+            if plot_cols:
+                st.subheader(f"📈 {selected_nursery} の空き数推移")
+                chart_data = match.set_index('表示月')[plot_cols]
+                
+                # グラフ表示
+                st.line_chart(chart_data)
 
-                    st.caption("出典：[目黒区オープンデータ](https://data.bodik.jp/dataset/131105_available_child_care)（CC BY 4.0）")
-                    
-                    with st.expander("⚠️ データの取り扱いと免責事項について"):
-                        st.markdown("""
-                        **【データの集計ルールについて】**
-                        * 目黒区より同月内に複数の空き数データが公表されている場合、当システムでは**より公表日時の新しいデータ（修正版等）を自動的に採用**してグラフ化しています。
-                        
-                        **【免責事項】**
-                        * 本サービスは目黒区のオープンデータを加工して提供していますが、データの正確性や最新性を保証するものではありません。
-                        * 実際の入所申し込みにあたっては、必ず[目黒区公式ホームページ](https://www.city.meguro.tokyo.jp/)や最新の募集要項をご確認ください。
-                        * 本サービスの情報に基づいて行われた判断や行動により生じた損害について、当方は一切の責任を負いかねます。
-                        """)
-                    
-                    with st.expander("詳細データ（数値）を確認する"):
-                        st.dataframe(match[['表示月'] + plot_cols].sort_values('表示月', ascending=False))
-                else:
-                    st.warning("表示する年齢を選択してください。")
+                # --- 寄付・サポートへの誘導（グラフの直後） ---
+                st.success("✅ グラフの生成が完了しました！")
+                st.info(f"""
+                ☕ **開発を応援しませんか？**
+                
+                このツールは個人が無料で開発・維持しています。もし保活のお役に立てましたら、
+                今後の運営維持（データ更新やサーバー代）のために、noteでのサポート（寄付）をいただけますと大変励みになります。
+                
+                [👉 **noteで開発をサポートする（100円〜）**]({NOTE_URL})
+                """)
+                
+                with st.expander("詳細データ（数値テーブル）を確認する"):
+                    st.dataframe(match[['表示月'] + plot_cols].sort_values('表示月', ascending=False))
+            else:
+                st.warning("表示する年齢を選択してください。")
+
+        # --- 6. 免責事項 ---
+        st.divider()
+        with st.expander("⚠️ データの取り扱いと免責事項について"):
+            st.caption("出典：[目黒区オープンデータ](https://data.bodik.jp/dataset/131105_available_child_care)（CC BY 4.0）")
+            st.markdown("""
+            * 目黒区より同月内に複数の空き数データが公表されている場合、**より公表日時の新しいデータ**を自動的に採用しています。
+            * 本サービスの情報は、実際の入所申し込みにあたっての補助的な材料としてご利用ください。
+            * 必ず[目黒区公式ホームページ](https://www.city.meguro.tokyo.jp/)や最新の募集要項をご確認ください。
+            * 本サービスの情報により生じた損害について、当方は一切の責任を負いかねます。
+            """)
