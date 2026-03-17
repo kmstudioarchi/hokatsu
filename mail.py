@@ -6,10 +6,11 @@ import re
 # --- 1. ページ設定 ---
 st.set_page_config(
     page_title="保育園の空き数 推移グラフ 生成【目黒区ver.】",
+    page_icon="🏠",
     layout="centered"
 )
 
-# --- 2. データの高速読み込み（進捗表示付き） ---
+# --- 2. データの読み込み関数（進捗表示付き） ---
 @st.cache_data(ttl=3600)
 def load_nursery_data_2years():
     package_id = "131105_available_child_care"
@@ -64,21 +65,20 @@ def load_nursery_data_2years():
         st.error(f"データ取得中にエラーが発生しました: {e}")
         return None
 
-# --- 3. noteのURL設定 ---
-# 作成したnote記事（使い方や想いを書いたもの）のURLをここに入れてください
-NOTE_URL = "https://note.com/あなたのID/n/記事のID"
+# --- 3. note URL設定 ---
+NOTE_URL = "https://note.com/kmstudioarchi/n/nf03d774279a0"
 
 # --- 4. メイン画面のヘッダー ---
 st.title("🏠 保育園の空き数 推移グラフ 生成【目黒区ver.】")
 st.markdown(f"""
 ### 過去2年間のデータを可視化して、保活をサポート。
 目黒区が公表している過去24ヶ月分の空き状況を自動集計し、特定の園の推移をグラフ化します。
-活用方法や開発の背景については [こちらのnote記事]({https://note.com/kmstudioarchi/n/nf03d774279a0}) をご覧ください。
+活用方法や開発の背景については [こちらのnote記事]({NOTE_URL}) をご覧ください。
 """)
 
 st.divider()
 
-# --- 5. メイン処理（誰でも利用可能） ---
+# --- 5. メイン処理 ---
 with st.spinner('⌛ 最新データを解析中... 最大2分ほどかかります。そのままお待ちください。'):
     df_all = load_nursery_data_2years()
 
@@ -117,15 +117,15 @@ if df_all is not None:
                 # グラフ表示
                 st.line_chart(chart_data)
 
-                # --- 寄付・サポートへの誘導（グラフの直後） ---
-                st.success("✅ グラフの生成が完了しました！")
+                # --- 寄付・サポートへの誘導 ---
+                st.success("✅ グラフの表示が完了しました！")
                 st.info(f"""
                 ☕ **開発を応援しませんか？**
                 
                 このツールは個人が無料で開発・維持しています。もし保活のお役に立てましたら、
-                今後の運営維持（データ更新やサーバー代）のために、noteでのサポート（寄付）をいただけますと大変励みになります。
+                今後の運営維持（データ更新やサーバー代）のために、noteでのサポートをいただけますと大変励みになります。
                 
-                [👉 **noteで開発をサポートする（100円〜）**]({https://note.com/kmstudioarchi/n/nf03d774279a0})
+                [👉 **noteで開発をサポートする（100円〜）**]({NOTE_URL})
                 """)
                 
                 with st.expander("詳細データ（数値テーブル）を確認する"):
